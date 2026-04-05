@@ -4,7 +4,7 @@ Vidéo présentation des fonctionnalités : https://www.youtube.com/watch?v=zObl
 
 *Les assets sont maintenant gérés indépendamment via un CDN R2 alimenté par mes soins*
 
-Version LB-Phone & qb-core prête
+Version LB-Phone sur base qb-core 
 
 ## 📝 Description
 
