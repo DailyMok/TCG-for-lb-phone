@@ -1,0 +1,37 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ═══ LB Phone theme-aware defaults ═══ */
+:root {
+    --tcg-bg: #111827;
+    --tcg-surface: #1f2937;
+    --tcg-text: #e5e7eb;
+    --tcg-text-secondary: #9ca3af;
+    --tcg-accent: #3b82f6;
+    --tcg-gold: #eab308;
+    --tcg-danger: #ef4444;
+    --tcg-success: #22c55e;
+}
+
+[data-theme="light"] {
+    --tcg-bg: #f3f4f6;
+    --tcg-surface: #ffffff;
+    --tcg-text: #111827;
+    --tcg-text-secondary: #6b7280;
+}
+
+body {
+    color: var(--tcg-text);
+    background: transparent;
+}
+
+/* ═══ Scrollbar ═══ */
+::-webkit-scrollbar { width: 3px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 3px; }
+
+/* ═══ Card aspect ratio ═══ */
+.tcg-card-ratio {
+    aspect-ratio: 936 / 2000;
+}
