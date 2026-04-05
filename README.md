@@ -192,3 +192,50 @@ Les joueurs explorent Los Santos et Cayo Perico pour capturer des **fragments de
 - **Hunt Map** : carte interactive complète avec zoom progressif persistant et GPS intégré
 
 ---
+
+**## ✨ Améliorations possibles
+
+### 🏢 Application gérée par une entreprise privée
+
+- Exploitation commerciale de l'application TCG par un job dédié
+- Bordures et fonds de profil exclusifs attribuables par l'entreprise à des joueurs spécifiques
+- Événements spéciaux, packs exclusifs, offres limitées
+- Prix dynamiques fixés par l'entreprise
+- Commission modulable sur les échanges
+
+### 🎃 Événements saisonniers
+
+- Archétypes event (Halloween, Noël, etc.) avec cartes limitées
+- Classification automatique via `tags.csv` et `set_prices.csv`
+
+### 🗺️ TCG Hunt — Évolutions possibles
+
+- Events Hunt : fragments rares annoncés à tous les joueurs (déjà codé côté serveur)
+- Classement des chasseurs (leaderboard captures)
+- Nouveaux stops sur Cayo Perico
+- Zones exclusives Cayo avec archétypes dédiés
+
+---
+
+## ⚙️ Notes techniques
+
+- Création automatique de toutes les tables au démarrage (pas de migration Prisma manuelle)
+- Synchronisation des cartes, bordures, prix, fonds de profil et rewards depuis les assets à chaque redémarrage
+- Re-tag automatique des archétypes NULL depuis `tags.csv`
+- Architecture respectant les conventions SOZ (Provider / Module / RPC / NUI)
+- Intégration complète téléphone (app + SMS + contacts + annuaire entreprise)
+- **Hunt** : tables créées via `$executeRawUnsafe` (pas dans schema.prisma), dates converties en heure locale via `dateToMySQL()`, spawn engine sur `OnceStep.RepositoriesLoaded` (après migrations)
+- **Hunt Cayo** : pool de stops et fragments totalement indépendant de LS (timers, rotation, bornes de spawn séparés)
+- **Carte interactive** : compensation automatique du zoom téléphone NUI via `useZoomConfig()` pour la précision du clic GPS, zoom et toggle zones persistants via atoms jotai
+- **XP** : calculé à la volée via `getLevelFromXp()`, pas stocké en tant que niveau en BDD — seul le total XP est persisté
+
+---
+
+## ✅ Impact
+
+- Ajout d'une nouvelle application téléphone complète avec système économique
+- v3 : ajout du module Hunt intégré dans l'app TCG existante
+- v3.7 : extension Cayo Perico, système XP, fonds de profil personnalisables
+- Développement parlant : aucun impact sur les systèmes existants
+- Gameplay parlant : impact le stress au niveau indiqué, sink économique via taxe 7% et achats de packs, gameplay exploration via Hunt (LS + Cayo Perico), progression long-terme via XP
+- Feature isolée et extensible à une entreprise privée**
