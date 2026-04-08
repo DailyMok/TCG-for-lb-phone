@@ -5,7 +5,7 @@ TCGConfig = {}
 -- This avoids players downloading ~1GB of card images on every connect.
 -- Example: 'https://your-bucket.r2.dev/lb-tcg' or 'https://cdn.example.com/lb-tcg'
 -- Set to nil or '' to keep using local cfx-nui files (default, for development).
-TCGConfig.CdnBaseUrl              = 'https://pub-46729710c39242f7835e3d489ce74dc9.r2.dev'
+TCGConfig.CdnBaseUrl              = 'https://cdn.tcg-daily.com'
 
 -- ═══ TCG Cards ═══
 TCGConfig.DailyCardRate           = 1
