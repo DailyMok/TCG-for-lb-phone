@@ -5,6 +5,7 @@
 // ═══ Items ═══
 export const HUNT_ITEM_DETECTOR = 'hunt_detector';
 export const HUNT_ITEM_RETRY = 'hunt_retry_chance';
+export const HUNT_ITEM_SHIELD = 'hunt_shield_uwu';
 
 export const HUNT_CAPTURE_RADIUS = 50;
 export const HUNT_GPS_MAX_RADIUS = 150;
@@ -15,6 +16,10 @@ export const HUNT_STOP_CLAIM_DELAY_MS = 60_000;
 export const HUNT_DETECTOR_DURATION_MS = 10 * 60 * 1000;
 export const HUNT_MINIGAME_DURATION_MS = 13_000;
 export const HUNT_MINIGAME_TOTAL_TARGETS = 20;
+export const HUNT_DUEL_DURATION_MS = 18_000;
+export const HUNT_DUEL_TOTAL_TARGETS = 28;
+export const HUNT_DUEL_TIMEOUT_MS = 5 * 60 * 1000;
+export const HUNT_SHIELD_DURATION_MS = 15 * 60 * 1000;
 
 export const HUNT_MAP_BOUNDS = { minX: -5658, maxX: 6689, minY: -6814, maxY: 8425 };
 
@@ -65,8 +70,21 @@ export interface HuntFragmentSpawn {
     z: number;
     expiresAt: number;
     isEvent: boolean;
+    isHotZone?: boolean;
     distance?: number;
     zoneName?: string;
+}
+
+export interface HuntZonePoint {
+    x: number;
+    y: number;
+}
+
+export interface HuntHotZone {
+    zoneName: string;
+    selectedAt: number;
+    expiresAt: number;
+    polygon: HuntZonePoint[];
 }
 
 export interface HuntFragmentProgress {
@@ -157,4 +175,69 @@ export interface HuntRecentActivity {
     username: string;
     archetype: string;
     capturedAt: number;
+}
+
+export interface HuntDuelSummary {
+    id: string;
+    challengerId: string;
+    challengerName: string;
+    challengerScore: number;
+    targetScore: number | null;
+    createdAt: number;
+    expiresAt: number;
+}
+
+export interface HuntDuelState {
+    incoming: HuntDuelSummary[];
+    activeShieldExpiresAt?: number | null;
+    duelWins: number;
+}
+
+export interface HuntDuelSearchResult {
+    success: boolean;
+    requiresShieldConfirm?: boolean;
+    shieldExpiresAt?: number | null;
+    duelId?: string;
+    role?: 'challenger' | 'target';
+    opponentName?: string;
+    expiresAt?: number;
+    message: string;
+}
+
+export interface HuntDuelStartResult {
+    ok: boolean;
+    message?: string;
+    duel?: {
+        id: string;
+        role: 'challenger' | 'target';
+        opponentName: string;
+        expiresAt: number;
+    };
+    difficulty?: {
+        targetSize: number;
+        targetDisplayMs: number;
+        totalTargets: number;
+        durationMs: number;
+    };
+}
+
+export interface HuntDuelSubmitResult {
+    success: boolean;
+    resolved?: boolean;
+    result?: {
+        duelId: string;
+        status: 'resolved' | 'draw' | string;
+        winnerId?: string | null;
+        winnerName?: string | null;
+        stolenArchetype?: string | null;
+        challengerScore: number;
+        targetScore?: number | null;
+    };
+    message: string;
+}
+
+export interface HuntShieldResult {
+    success: boolean;
+    shieldExpiresAt?: number | null;
+    message: string;
 }

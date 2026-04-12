@@ -5,6 +5,8 @@ import type {
     HuntFragmentSpawn, HuntStartCaptureResult, HuntCaptureResult,
     HuntCraftResult, HuntPokestopResult, HuntDetectorResult,
     HuntNearestFragment, HuntRecentActivity, HuntItem, HuntFragmentProgress,
+    HuntHotZone, HuntDuelState, HuntDuelSearchResult, HuntDuelStartResult,
+    HuntDuelSubmitResult, HuntShieldResult,
 } from '../types/tcg-hunt.types';
 import {
     huntNearbyFragmentsAtom,
@@ -13,6 +15,8 @@ import {
     huntInventoryAtom,
     huntPokestopsAtom,
     huntRecentActivityAtom,
+    huntHotZoneAtom,
+    huntDuelStateAtom,
 } from '../atoms/tcg-hunt.atom';
 import type { HuntActiveStop } from '../types/tcg-hunt.types';
 
@@ -28,6 +32,18 @@ export function useTcgHuntNearby() {
     }, [setNearby]);
 
     return { refreshNearby };
+}
+
+// ═══ Hot Zone ═══
+export function useTcgHuntHotZone() {
+    const setHotZone = useSetAtom(huntHotZoneAtom);
+
+    const refreshHotZone = useCallback(async () => {
+        const result = await nui<HuntHotZone | null>('tcg:huntGetHotZone');
+        setHotZone(result ?? null);
+    }, [setHotZone]);
+
+    return { refreshHotZone };
 }
 
 // ═══ Capture ═══
@@ -165,4 +181,49 @@ export function useTcgHuntPlayerHeading() {
         return result ?? 0;
     }, []);
     return { getPlayerHeading };
+}
+
+// ═══ Duels + Shield ═══
+export function useTcgHuntDuels() {
+    const setDuelState = useSetAtom(huntDuelStateAtom);
+
+    const refreshDuelState = useCallback(async () => {
+        const result = await nui<HuntDuelState>('tcg:huntGetDuelState');
+        if (result) {
+            setDuelState({
+                incoming: result.incoming ?? [],
+                activeShieldExpiresAt: result.activeShieldExpiresAt ?? null,
+                duelWins: result.duelWins ?? 0,
+            });
+        }
+        return result;
+    }, [setDuelState]);
+
+    const useShield = useCallback(async () => {
+        const result = await nui<HuntShieldResult>('tcg:huntUseShield');
+        await refreshDuelState();
+        return result;
+    }, [refreshDuelState]);
+
+    const searchDuel = useCallback(async (breakShield = false) => {
+        const result = await nui<HuntDuelSearchResult>('tcg:huntDuelSearch', { breakShield });
+        await refreshDuelState();
+        return result;
+    }, [refreshDuelState]);
+
+    const startDuel = useCallback(async (duelId: string) => {
+        return await nui<HuntDuelStartResult>('tcg:huntDuelStart', { duelId });
+    }, []);
+
+    const saveDuelScore = useCallback(async (duelId: string, score: number) => {
+        return await nui<{ success: boolean }>('tcg:huntDuelSaveScore', { duelId, score });
+    }, []);
+
+    const submitDuel = useCallback(async (duelId: string, score: number, startTimestamp: number) => {
+        const result = await nui<HuntDuelSubmitResult>('tcg:huntDuelSubmit', { duelId, score, startTimestamp });
+        await refreshDuelState();
+        return result;
+    }, [refreshDuelState]);
+
+    return { refreshDuelState, useShield, searchDuel, startDuel, saveDuelScore, submitDuel };
 }

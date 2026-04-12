@@ -13,6 +13,12 @@ RegisterNUICallback('tcg:huntGetNearby', function(data, cb)
     end, x, y, z)
 end)
 
+RegisterNUICallback('tcg:huntGetHotZone', function(data, cb)
+    QBCore.Functions.TriggerCallback('lb-tcg:server:huntGetHotZone', function(result)
+        cb(result)
+    end)
+end)
+
 -- ═══ Capture ═══
 
 RegisterNUICallback('tcg:huntStartCapture', function(data, cb)
@@ -81,6 +87,44 @@ RegisterNUICallback('tcg:huntUseDetector', function(data, cb)
     QBCore.Functions.TriggerCallback('lb-tcg:server:huntUseDetector', function(result)
         cb(result)
     end, x, y, z)
+end)
+
+-- ═══ Duels + Shield ═══
+
+RegisterNUICallback('tcg:huntGetDuelState', function(data, cb)
+    QBCore.Functions.TriggerCallback('lb-tcg:server:huntGetDuelState', function(result)
+        cb(result)
+    end)
+end)
+
+RegisterNUICallback('tcg:huntUseShield', function(data, cb)
+    QBCore.Functions.TriggerCallback('lb-tcg:server:huntUseShield', function(result)
+        cb(result)
+    end)
+end)
+
+RegisterNUICallback('tcg:huntDuelSearch', function(data, cb)
+    QBCore.Functions.TriggerCallback('lb-tcg:server:huntDuelSearch', function(result)
+        cb(result)
+    end, data and data.breakShield)
+end)
+
+RegisterNUICallback('tcg:huntDuelStart', function(data, cb)
+    QBCore.Functions.TriggerCallback('lb-tcg:server:huntDuelStart', function(result)
+        cb(result)
+    end, data.duelId)
+end)
+
+RegisterNUICallback('tcg:huntDuelSaveScore', function(data, cb)
+    QBCore.Functions.TriggerCallback('lb-tcg:server:huntDuelSaveScore', function(result)
+        cb(result)
+    end, data.duelId, data.score)
+end)
+
+RegisterNUICallback('tcg:huntDuelSubmit', function(data, cb)
+    QBCore.Functions.TriggerCallback('lb-tcg:server:huntDuelSubmit', function(result)
+        cb(result)
+    end, data.duelId, data.score, data.startTimestamp)
 end)
 
 -- ═══ Nearest Fragment ═══
@@ -152,6 +196,27 @@ RegisterNetEvent('lb-tcg:client:huntEventSpawn', function(eventData)
     -- Forward event to React UI via NUI message so Jotai atom can update
     SendNUIMessage({
         action = 'tcg:huntEventSpawn',
+        data = eventData
+    })
+end)
+
+RegisterNetEvent('lb-tcg:client:huntHotZoneUpdated', function(eventData)
+    SendNUIMessage({
+        action = 'tcg:huntHotZoneUpdated',
+        data = eventData
+    })
+end)
+
+RegisterNetEvent('lb-tcg:client:huntDuelIncoming', function(eventData)
+    SendNUIMessage({
+        action = 'tcg:huntDuelIncoming',
+        data = eventData
+    })
+end)
+
+RegisterNetEvent('lb-tcg:client:huntDuelUpdated', function(eventData)
+    SendNUIMessage({
+        action = 'tcg:huntDuelUpdated',
         data = eventData
     })
 end)

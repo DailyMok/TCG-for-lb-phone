@@ -10,8 +10,9 @@ import {
     huntCapturedIdsAtom,
     huntMapZoomAtom,
     huntMapShowZonesAtom,
+    huntHotZoneAtom,
 } from '../atoms/tcg-hunt.atom';
-import { useTcgHuntPokestops, useTcgHuntWaypoint } from '../hooks/useTcgHunt';
+import { useTcgHuntHotZone, useTcgHuntPokestops, useTcgHuntWaypoint } from '../hooks/useTcgHunt';
 import { HuntActiveStop, HuntFragmentSpawn, HUNT_MAP_BOUNDS } from '../types/tcg-hunt.types';
 
 const TIER_MARKER_COLORS: Record<string, string> = {
@@ -59,8 +60,10 @@ export const TcgHuntMap: React.FC = () => {
     const pokestops = useAtomValue(huntPokestopsAtom);
     const visibleFragments = useAtomValue(huntMapVisibleFragmentsAtom);
     const capturedIds = useAtomValue(huntCapturedIdsAtom);
+    const hotZone = useAtomValue(huntHotZoneAtom);
     const { refreshPokestops } = useTcgHuntPokestops();
     const { setWaypoint } = useTcgHuntWaypoint();
+    const { refreshHotZone } = useTcgHuntHotZone();
 
     const [selectedItem, setSelectedItem] = useState<{ type: 'pokestop'; data: HuntActiveStop } | { type: 'fragment'; data: HuntFragmentSpawn } | null>(null);
     const [message, setMessage] = useState<string | null>(null);
@@ -90,6 +93,7 @@ export const TcgHuntMap: React.FC = () => {
 
     useEffect(() => {
         refreshPokestops();
+        refreshHotZone();
         fetchPos();
     }, []);
 
@@ -219,6 +223,21 @@ export const TcgHuntMap: React.FC = () => {
                 <div ref={mapRef} style={{ width: `${(1 / scale) * 100}%`, position: 'relative' }} onClick={handleMapClick}>
                     <img src={getAssetUrl(showZones ? 'hunt/mapZones.webp' : 'hunt/map.webp')} alt="Carte" className="w-full h-auto block select-none" draggable={false} />
 
+                    {hotZone && hotZone.expiresAt > Date.now() && hotZone.polygon.length > 0 && (
+                        <svg className="absolute inset-0 w-full h-full pointer-events-none z-10" viewBox="0 0 100 100" preserveAspectRatio="none">
+                            <polygon
+                                points={hotZone.polygon.map(p => {
+                                    const pos = gtaToPercent(p.x, p.y);
+                                    return `${pos.x},${pos.y}`;
+                                }).join(' ')}
+                                fill="rgba(34,211,238,0.30)"
+                                stroke="rgba(251,146,60,0.85)"
+                                strokeWidth="0.18"
+                                vectorEffect="non-scaling-stroke"
+                            />
+                        </svg>
+                    )}
+
                     {/* TCG Stop markers */}
                     {(pokestops as HuntActiveStop[]).map(stop => {
                         const pos = gtaToPercent(stop.x, stop.y);
@@ -326,7 +345,7 @@ export const TcgHuntMap: React.FC = () => {
                             return (<>
                                 <div className="text-white text-sm font-semibold mb-1">📍 {stop.name}</div>
                                 <div className={`text-[10px] mb-1 ${status.color}`}>{status.text}</div>
-                                <div className="text-[10px] text-gray-400 mb-3">Items : Détecteur, Seconde Chance</div>
+                                <div className="text-[10px] text-gray-400 mb-3">Items : Détecteur, Seconde Chance, Bouclier UwU</div>
                             </>);
                         })() : (() => {
                             const frag = selectedItem.data as HuntFragmentSpawn;

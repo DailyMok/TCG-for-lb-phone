@@ -295,6 +295,7 @@ local function migrateXpColumns()
         { name = 'bg_profile_id', def = 'INT DEFAULT NULL' },
         { name = 'active_title', def = 'VARCHAR(50) DEFAULT NULL' },
         { name = 'bg_opacity', def = 'INT NOT NULL DEFAULT 15' },
+        { name = 'hunt_total_duel_wins', def = 'INT NOT NULL DEFAULT 0' },
     }
     for _, col in ipairs(cols) do
         pcall(function()
@@ -307,6 +308,65 @@ local function migrateXpColumns()
         MySQL.update.await("ALTER TABLE tcg_trade_partner ADD COLUMN last_xp_trade_month VARCHAR(7) DEFAULT NULL")
         print('[LB-TCG Migration] Column last_xp_trade_month added to tcg_trade_partner')
     end)
+end
+
+-- ═══ Hunt duel + hot zone migrations ═══
+
+local function migrateHuntDuelHotZone()
+    pcall(function()
+        MySQL.update.await('ALTER TABLE tcg_hunt_fragment_spawn ADD COLUMN is_hot_zone BOOLEAN NOT NULL DEFAULT FALSE')
+        print('[LB-TCG Migration] Column is_hot_zone added to tcg_hunt_fragment_spawn')
+    end)
+    pcall(function()
+        MySQL.update.await('ALTER TABLE tcg_hunt_fragment_spawn ADD INDEX idx_hot_zone (is_hot_zone, expires_at)')
+        print('[LB-TCG Migration] Index idx_hot_zone added to tcg_hunt_fragment_spawn')
+    end)
+
+    MySQL.update.await([[
+        CREATE TABLE IF NOT EXISTS tcg_hunt_hot_zone (
+            id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            zone_name VARCHAR(50) NOT NULL,
+            hour_key VARCHAR(13) NOT NULL,
+            selected_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            expires_at DATETIME NOT NULL,
+            UNIQUE KEY uk_hour_key (hour_key),
+            INDEX idx_expires_at (expires_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ]])
+
+    MySQL.update.await([[
+        CREATE TABLE IF NOT EXISTS tcg_hunt_duel (
+            id VARCHAR(36) NOT NULL PRIMARY KEY,
+            challenger_id VARCHAR(50) NOT NULL,
+            target_id VARCHAR(50) NOT NULL,
+            challenger_score INT NOT NULL DEFAULT 0,
+            target_score INT DEFAULT NULL,
+            challenger_started_at DATETIME DEFAULT NULL,
+            target_started_at DATETIME DEFAULT NULL,
+            challenger_completed_at DATETIME DEFAULT NULL,
+            target_completed_at DATETIME DEFAULT NULL,
+            status VARCHAR(20) NOT NULL DEFAULT 'pending',
+            winner_id VARCHAR(50) DEFAULT NULL,
+            stolen_archetype VARCHAR(50) DEFAULT NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            expires_at DATETIME NOT NULL,
+            resolved_at DATETIME DEFAULT NULL,
+            INDEX idx_target_pending (target_id, status, expires_at),
+            INDEX idx_challenger (challenger_id, created_at),
+            INDEX idx_pair_created (challenger_id, target_id, created_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ]])
+
+    MySQL.update.await([[
+        CREATE TABLE IF NOT EXISTS tcg_hunt_player_shield (
+            citizenid VARCHAR(50) NOT NULL PRIMARY KEY,
+            expires_at DATETIME NOT NULL,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            INDEX idx_expires_at (expires_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ]])
+
+    print('[LB-TCG Migration] Hunt duel/hot zone tables ready')
 end
 
 -- ═══ XP System: create tcg_bg_profile table ═══
@@ -474,6 +534,7 @@ CreateThread(function()
     migrateXpColumns()
     createBgProfileTable()
     createLevelRewardTable()
+    migrateHuntDuelHotZone()
     syncBgProfiles()
     syncLevelRewards()
     -- Cleanup

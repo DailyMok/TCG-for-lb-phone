@@ -31,6 +31,7 @@ server_scripts {
     'server/migration.lua',
     'server/main.lua',
     'server/hunt.lua',
+    'server/duel.lua',
     'server/spawn.lua',
 }
 

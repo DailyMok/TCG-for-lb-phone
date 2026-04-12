@@ -16,6 +16,9 @@ import {
     huntDetectorExpiresAtom,
     huntCapturedIdsAtom,
     huntStopClaimTimerAtom,
+    huntHotZoneAtom,
+    huntDuelStateAtom,
+    huntDuelNotificationAtom,
 } from '../atoms/tcg-hunt.atom';
 import {
     useTcgHuntNearby,
@@ -25,9 +28,12 @@ import {
     useTcgHuntPokestops,
     useTcgHuntWaypoint,
     useTcgHuntVehicleCheck,
+    useTcgHuntHotZone,
+    useTcgHuntDuels,
 } from '../hooks/useTcgHunt';
 import {
     HuntActiveStop,
+    HuntDuelSummary,
     HUNT_ITEM_DETECTOR,
     HUNT_STOP_INTERACTION_RADIUS,
     HUNT_CAPTURE_RADIUS,
@@ -60,6 +66,9 @@ export const TcgHuntHome: React.FC = () => {
     const setDetectorExpires = useSetAtom(huntDetectorExpiresAtom);
     const capturedIds = useAtomValue(huntCapturedIdsAtom);
     const setCapturedIds = useSetAtom(huntCapturedIdsAtom);
+    const hotZone = useAtomValue(huntHotZoneAtom);
+    const duelState = useAtomValue(huntDuelStateAtom);
+    const duelNotification = useAtomValue(huntDuelNotificationAtom);
 
     const { refreshNearby } = useTcgHuntNearby();
     const { refreshNearest } = useTcgHuntNearest();
@@ -68,6 +77,8 @@ export const TcgHuntHome: React.FC = () => {
     const { refreshPokestops, usePokestop } = useTcgHuntPokestops();
     const { setWaypoint } = useTcgHuntWaypoint();
     const { checkVehicle } = useTcgHuntVehicleCheck();
+    const { refreshHotZone } = useTcgHuntHotZone();
+    const { refreshDuelState, searchDuel } = useTcgHuntDuels();
 
     const [playerPos, setPlayerPos] = useState<{ x: number; y: number; z: number } | null>(null);
     const [message, setMessage] = useState<string | null>(null);
@@ -75,6 +86,8 @@ export const TcgHuntHome: React.FC = () => {
     const [claimCooldown, setClaimCooldown] = useState(false);
     const [tooFarFragment, setTooFarFragment] = useState<{ id: string; x: number; y: number; archetype: string; distance: number } | null>(null);
     const [showDetectorPopup, setShowDetectorPopup] = useState(false);
+    const [showShieldDuelPopup, setShowShieldDuelPopup] = useState(false);
+    const [duelSearchBusy, setDuelSearchBusy] = useState(false);
     const [vehicleWarning, setVehicleWarning] = useState<string | null>(null);
 
     const [stopClaimTimer, setStopClaimTimer] = useAtom(huntStopClaimTimerAtom);
@@ -111,13 +124,17 @@ export const TcgHuntHome: React.FC = () => {
             await refreshNearest(pos.x, pos.y, pos.z);
         }
         await refreshPokestops();
-    }, [fetchPlayerPos, refreshNearby, refreshNearest, refreshPokestops]);
+        await refreshHotZone();
+        await refreshDuelState();
+    }, [fetchPlayerPos, refreshNearby, refreshNearest, refreshPokestops, refreshHotZone, refreshDuelState]);
 
     // Init
     useEffect(() => {
         const init = async () => {
             await fullRefresh();
             await refreshItems();
+            await refreshHotZone();
+            await refreshDuelState();
         };
         init();
         return () => { if (cooldownTimerRef.current) clearTimeout(cooldownTimerRef.current); };
@@ -131,9 +148,17 @@ export const TcgHuntHome: React.FC = () => {
                 await refreshNearby(pos.x, pos.y, pos.z);
                 await refreshNearest(pos.x, pos.y, pos.z);
             }
+            await refreshHotZone();
+            await refreshDuelState();
         }, AUTO_REFRESH_MS);
         return () => clearInterval(interval);
-    }, [fetchPlayerPos, refreshNearby, refreshNearest]);
+    }, [fetchPlayerPos, refreshNearby, refreshNearest, refreshHotZone, refreshDuelState]);
+
+    useEffect(() => {
+        if (duelNotification) {
+            refreshDuelState();
+        }
+    }, [duelNotification, refreshDuelState]);
 
     // Notification when a new fragment appears
     useEffect(() => {
@@ -245,6 +270,27 @@ export const TcgHuntHome: React.FC = () => {
         }
     }, [useDetector, fetchPlayerPos, setDetectorFragments, setDetectorExpires]);
 
+    const handleSearchDuel = useCallback(async (breakShield = false) => {
+        if (duelSearchBusy) return;
+        setDuelSearchBusy(true);
+        const result = await searchDuel(breakShield);
+        setDuelSearchBusy(false);
+
+        if (!result) return;
+        if (result.requiresShieldConfirm) {
+            setShowShieldDuelPopup(true);
+            return;
+        }
+
+        setMessage(result.message);
+        setTimeout(() => setMessage(null), 4000);
+        if (result.success && result.duelId) {
+            navigate(`/hunt/duel/${result.duelId}`, {
+                state: { role: result.role, opponentName: result.opponentName },
+            });
+        }
+    }, [duelSearchBusy, searchDuel, navigate]);
+
     return (
         <div className="flex-1 flex flex-col overflow-hidden relative">
             <TcgScrollContainer className="flex flex-col h-full p-3 gap-3">
@@ -305,6 +351,62 @@ export const TcgHuntHome: React.FC = () => {
                     )}
                     onClick={() => setShowDetectorPopup(true)} disabled={detectorCount <= 0}
                 >🔍 Détecteur ({detectorCount})</button>
+
+                {/* Hot zone */}
+                {hotZone && hotZone.expiresAt > Date.now() && (
+                    <div className="p-3 rounded-lg border border-orange-400/30 bg-gradient-to-r from-cyan-500/10 to-orange-500/10">
+                        <div className="flex items-center justify-between gap-2">
+                            <div>
+                                <div className="text-[10px] text-orange-300 uppercase tracking-wider font-bold">Zone chaude</div>
+                                <div className="text-white text-sm font-semibold">{hotZone.zoneName}</div>
+                            </div>
+                            <ZoneTimer expiresAt={hotZone.expiresAt} />
+                        </div>
+                        <div className="text-[10px] text-white/45 mt-1">Un fragment classique y respawn toutes les 5 minutes.</div>
+                    </div>
+                )}
+
+                {/* Duels */}
+                <div className="p-3 rounded-lg bg-white/5 border border-white/10 flex flex-col gap-2">
+                    <div className="flex items-center justify-between gap-2">
+                        <div>
+                            <div className="text-[10px] text-cyan-300 uppercase tracking-wider font-bold">Duels</div>
+                            <div className="text-white/50 text-[10px]">Victoires : {duelState.duelWins}</div>
+                        </div>
+                        {duelState.activeShieldExpiresAt && duelState.activeShieldExpiresAt > Date.now() && (
+                            <div className="text-right">
+                                <div className="text-[10px] text-cyan-300 font-bold">Bouclier UwU</div>
+                                <ZoneTimer expiresAt={duelState.activeShieldExpiresAt} />
+                            </div>
+                        )}
+                    </div>
+
+                    {duelNotification && duelNotification.expiresAt > Date.now() && (
+                        <div className="p-2 rounded-md bg-cyan-600/20 border border-cyan-400/25 text-cyan-100 text-xs">
+                            {duelNotification.message}
+                        </div>
+                    )}
+
+                    <button
+                        className={clsx(
+                            'w-full py-2.5 rounded-lg text-xs font-bold transition-colors',
+                            duelSearchBusy ? 'bg-white/5 border border-white/10 text-gray-500' : 'bg-orange-500/20 border border-orange-400/40 text-orange-200 active:bg-orange-500/30'
+                        )}
+                        onClick={() => handleSearchDuel(false)}
+                        disabled={duelSearchBusy}
+                    >
+                        {duelSearchBusy ? 'Recherche...' : 'Duel'}
+                    </button>
+
+                    {duelState.incoming.length > 0 && (
+                        <div className="flex flex-col gap-1.5">
+                            <div className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">Défis reçus</div>
+                            {duelState.incoming.map(duel => (
+                                <IncomingDuelRow key={duel.id} duel={duel} onPlay={() => navigate(`/hunt/duel/${duel.id}`)} />
+                            ))}
+                        </div>
+                    )}
+                </div>
 
                 {/* Nearest fragment */}
                 {nearestFragment && allVisibleFragments.length === 0 && (
@@ -371,6 +473,7 @@ export const TcgHuntHome: React.FC = () => {
                                                 <div className="text-sm text-white font-medium">
                                                     {fragment.archetype}
                                                     {fragment.isEvent && <span className="ml-2 text-[10px] text-purple-300">⚡ Event</span>}
+                                                    {fragment.isHotZone && <span className="ml-2 text-[10px] text-orange-300">Zone chaude</span>}
                                                 </div>
                                                 <div className="text-[10px] text-gray-500">{TIER_LABELS[fragment.tier]} • {fragment.distance ? `${Math.round(fragment.distance)}m` : '...'}{fragment.zoneName ? ` • ${fragment.zoneName}` : ''}</div>
                                             </>
@@ -478,6 +581,36 @@ export const TcgHuntHome: React.FC = () => {
                     </div>
                 </>
             )}
+
+            {/* ═══ Popup confirmation perte bouclier ═══ */}
+            {showShieldDuelPopup && (
+                <>
+                    <div className="fixed inset-0 bg-black/70 z-40" onClick={() => setShowShieldDuelPopup(false)} />
+                    <div
+                        className="fixed z-50 bg-gray-900 rounded-2xl p-5 w-full max-w-[280px] border border-white/10"
+                        style={{ top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <p className="text-sm text-white font-bold text-center mb-2">Bouclier UwU actif</p>
+                        <p className="text-xs text-gray-400 text-center mb-4">
+                            Chercher un duel désactivera ton Bouclier UwU et le temps de protection restant sera perdu.
+                        </p>
+                        <div className="flex gap-2">
+                            <button
+                                className="flex-1 py-2.5 rounded-xl bg-white/5 border border-white/10 text-gray-400 text-sm font-semibold"
+                                onClick={() => setShowShieldDuelPopup(false)}
+                            >Annuler</button>
+                            <button
+                                className="flex-1 py-2.5 rounded-xl bg-orange-600/80 text-white text-sm font-bold"
+                                onClick={async () => {
+                                    setShowShieldDuelPopup(false);
+                                    await handleSearchDuel(true);
+                                }}
+                            >Chercher</button>
+                        </div>
+                    </div>
+                </>
+            )}
         </div>
     );
 };
@@ -516,3 +649,36 @@ const DetectorTimer: React.FC<{ expiresAt: number }> = ({ expiresAt }) => {
     if (!remaining) return null;
     return <span className="text-[10px] text-cyan-400 font-mono">🔍 {remaining}</span>;
 };
+
+const ZoneTimer: React.FC<{ expiresAt: number }> = ({ expiresAt }) => {
+    const [remaining, setRemaining] = useState('');
+    useEffect(() => {
+        const update = () => {
+            const diff = expiresAt - Date.now();
+            if (diff <= 0) { setRemaining('0:00'); return; }
+            const mins = Math.floor(diff / 60_000);
+            const secs = Math.floor((diff % 60_000) / 1000);
+            setRemaining(`${mins}:${secs.toString().padStart(2, '0')}`);
+        };
+        update();
+        const i = setInterval(update, 1000);
+        return () => clearInterval(i);
+    }, [expiresAt]);
+    return <span className="text-[10px] text-cyan-300 font-mono font-semibold">{remaining}</span>;
+};
+
+const IncomingDuelRow: React.FC<{ duel: HuntDuelSummary; onPlay: () => void }> = ({ duel, onPlay }) => (
+    <div className="flex items-center gap-2 p-2 rounded-md bg-gray-900/60 border border-white/10">
+        <div className="flex-1 min-w-0">
+            <div className="text-white text-xs font-semibold truncate">{duel.challengerName}</div>
+            <div className="text-white/40 text-[10px]">Score adverse : {duel.challengerScore}</div>
+        </div>
+        <ZoneTimer expiresAt={duel.expiresAt} />
+        <button
+            className="px-2.5 py-1.5 rounded-md bg-cyan-600 active:bg-cyan-700 text-white text-[10px] font-bold"
+            onClick={onPlay}
+        >
+            Jouer
+        </button>
+    </div>
+);

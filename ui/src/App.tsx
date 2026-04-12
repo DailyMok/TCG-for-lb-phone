@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { HashRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { useSetAtom } from 'jotai';
 import { useTcgContacts, useTcgDailyStatus, useTcgProfile, useTcgTrades } from './hooks/useTcg';
 import { getAssetUrl, initAssetConfig } from './utils/nui';
+import { huntDuelNotificationAtom, huntEventNotificationAtom, huntHotZoneAtom } from './atoms/tcg-hunt.atom';
 
 // ═══ Pages ═══
 import { TcgSetup } from './pages/TcgSetup';
@@ -18,6 +20,7 @@ import { TcgHuntHome } from './pages/TcgHuntHome';
 import { TcgHuntMap } from './pages/TcgHuntMap';
 import { TcgHuntCapture } from './pages/TcgHuntCapture';
 import { TcgHuntInventory } from './pages/TcgHuntInventory';
+import { TcgHuntDuel } from './pages/TcgHuntDuel';
 
 // ════════════════════════════════════════════════════════════════
 // Header — Identical to SOZ TcgApp.tsx
@@ -190,6 +193,44 @@ export const App: React.FC = () => {
 
 /** Inner shell — needs to be inside HashRouter to use useLocation */
 const AppShell: React.FC<{ username: string }> = ({ username }) => {
+    const setEventNotification = useSetAtom(huntEventNotificationAtom);
+    const setHotZone = useSetAtom(huntHotZoneAtom);
+    const setDuelNotification = useSetAtom(huntDuelNotificationAtom);
+
+    useEffect(() => {
+        const onMessage = (event: MessageEvent) => {
+            const payload = event.data;
+            if (!payload || typeof payload !== 'object') return;
+            if (payload.action === 'tcg:huntEventSpawn' && payload.data) {
+                setEventNotification({
+                    archetype: payload.data.archetype,
+                    message: payload.data.message,
+                    expiresAt: Date.now() + 10 * 60 * 1000,
+                });
+            }
+            if (payload.action === 'tcg:huntHotZoneUpdated' && payload.data) {
+                setHotZone(prev => prev ? { ...prev, ...payload.data } : prev);
+            }
+            if (payload.action === 'tcg:huntDuelIncoming' && payload.data) {
+                setDuelNotification({
+                    duelId: payload.data.duelId,
+                    challengerName: payload.data.challengerName,
+                    message: `${payload.data.challengerName ?? 'Un joueur'} vous a défié !`,
+                    expiresAt: payload.data.expiresAt ?? Date.now() + 5 * 60 * 1000,
+                });
+            }
+            if (payload.action === 'tcg:huntDuelUpdated' && payload.data) {
+                setDuelNotification({
+                    duelId: payload.data.duelId,
+                    message: 'Résultat de duel disponible.',
+                    expiresAt: Date.now() + 15_000,
+                });
+            }
+        };
+        window.addEventListener('message', onMessage);
+        return () => window.removeEventListener('message', onMessage);
+    }, [setEventNotification, setHotZone, setDuelNotification]);
+
     return (
         <div className="h-full flex flex-col overflow-hidden" style={{ background: 'var(--tcg-bg)' }}>
             {/* Safe area spacer for LB Phone status bar */}
@@ -213,6 +254,7 @@ const AppShell: React.FC<{ username: string }> = ({ username }) => {
                     <Route path="/hunt" element={<TcgHuntHome />} />
                     <Route path="/hunt/map" element={<TcgHuntMap />} />
                     <Route path="/hunt/capture/:fragmentId" element={<TcgHuntCapture />} />
+                    <Route path="/hunt/duel/:duelId" element={<TcgHuntDuel />} />
                     <Route path="/hunt/inventory" element={<TcgHuntInventory />} />
                     <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>

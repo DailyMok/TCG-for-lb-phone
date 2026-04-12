@@ -69,6 +69,21 @@ TCGConfig.Hunt.MinigameDurationMs         = 13000
 TCGConfig.Hunt.MinigameTotalTargets       = 20
 TCGConfig.Hunt.FragmentsPerCard           = 7
 
+-- Hot zones
+TCGConfig.Hunt.HotZoneFragmentLifetimeMs  = 5 * 60 * 1000
+TCGConfig.Hunt.HotZoneRotationIntervalMs  = 5 * 60 * 1000
+TCGConfig.Hunt.HotZoneMinDistance         = 250
+
+-- Duels
+TCGConfig.Hunt.DuelRadius                 = 30
+TCGConfig.Hunt.DuelTimeoutMs              = 5 * 60 * 1000
+TCGConfig.Hunt.DuelCooldownMs             = 60 * 60 * 1000
+TCGConfig.Hunt.DuelDurationMs             = TCGConfig.Hunt.MinigameDurationMs + 5000
+TCGConfig.Hunt.DuelTotalTargets           = 28
+TCGConfig.Hunt.DuelMaxPendingReceived     = 3
+TCGConfig.Hunt.DuelTargetSize             = 44
+TCGConfig.Hunt.DuelTargetDisplayMs        = 800
+
 -- Difficulty per tier
 TCGConfig.Hunt.Difficulty = {
     COMMUNE            = { targetSize = 44, targetDisplayMs = 800, quota = 15, quotaRetry = 10 },
@@ -89,7 +104,10 @@ TCGConfig.Hunt.StopClaimDelayMs           = 60000
 -- Items
 TCGConfig.Hunt.ItemDetector               = 'hunt_detector'
 TCGConfig.Hunt.ItemRetry                  = 'hunt_retry_chance'
-TCGConfig.Hunt.StarterItems               = { hunt_detector = 3, hunt_retry_chance = 3 }
+TCGConfig.Hunt.ItemShield                 = 'hunt_shield_uwu'
+TCGConfig.Hunt.ItemShieldLabel            = 'Bouclier UwU'
+TCGConfig.Hunt.ShieldDurationMs           = 15 * 60 * 1000
+TCGConfig.Hunt.StarterItems               = { hunt_detector = 3, hunt_retry_chance = 3, hunt_shield_uwu = 2 }
 
 -- Spawn weights
 TCGConfig.Hunt.SpawnWeights = { COMMUNE = 60, COMMUNE_SURVEILLER = 30, RARE = 10 }
@@ -176,6 +194,7 @@ TCGConfig.XpSources = {
     HUNT_CAPTURE       = 15,
     HUNT_CRAFT         = 100,
     HUNT_EVENT_CAPTURE = 40,
+    HUNT_DUEL_WIN      = 5,
 }
 
 -- Level thresholds — populated at startup from level_rewards.csv

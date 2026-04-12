@@ -4,7 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { TCG_BIO_MAX, TcgBadge } from '../types/tcg.types';
 import { useTcgCollection, useTcgContacts, useTcgProfilePage, useTcgSetAvatar, useTcgSetBio, useTcgSetBorder, useTcgSetBgProfile } from '../hooks/useTcg';
 import { TcgScrollContainer } from '../components/TcgScrollContainer';
-import { getAssetUrl, getCardImageUrl, getBorderImageUrl, getBadgeImageUrl, getBgProfileImageUrl } from '../utils/nui';
+import { getAssetUrl, getCardImageUrl, getBorderImageUrl, getBadgeImageUrl, getBgProfileImageUrl, setKeyboardFocus } from '../utils/nui';
 
 
 // ---- Interactive circular crop component ----
@@ -246,6 +246,12 @@ export const TcgProfile: React.FC = () => {
         }
     }, [showAvatarPicker]);
 
+    useEffect(() => {
+        return () => {
+            void setKeyboardFocus(false);
+        };
+    }, []);
+
     // Derive contact status + contactId for removal
     const { contactStatus, contactId } = React.useMemo(() => {
         if (!profilePage) return { contactStatus: 'none' as const, contactId: null as number | null };
@@ -279,6 +285,7 @@ export const TcgProfile: React.FC = () => {
         setSendingRequest(false);
         if (res?.success) {
             setActionMessage({ text: 'Demande envoyée !', type: 'success' });
+            void setKeyboardFocus(false);
             setShowMessageInput(false);
             setContactMessage('');
             refreshContacts();
@@ -287,10 +294,19 @@ export const TcgProfile: React.FC = () => {
         }
     };
 
+    const handleTextFocus = () => {
+        void setKeyboardFocus(true);
+    };
+
+    const handleTextBlur = () => {
+        void setKeyboardFocus(false);
+    };
+
     const handleSaveBio = async () => {
         setBioMessage(null);
         const res = await setBio(bioText.trim());
         if (res?.success) {
+            void setKeyboardFocus(false);
             setEditingBio(false);
             setBioMessage(null);
             if (citizenid) fetch(citizenid);
@@ -531,26 +547,30 @@ export const TcgProfile: React.FC = () => {
 
                                 {/* Bio edit popup (modal overlay — blocks game input) */}
                                 {editingBio && (
-                                    <div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-6" onClick={() => { setEditingBio(false); setBioText(profilePage.bio ?? ''); setBioMessage(null); }}>
+                                    <div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-6" onClick={() => { void setKeyboardFocus(false); setEditingBio(false); setBioText(profilePage.bio ?? ''); setBioMessage(null); }}>
                                         <div className="bg-gray-900 rounded-2xl p-5 w-full max-w-[280px] border border-white/10" onClick={e => e.stopPropagation()}>
                                             <p className="text-sm text-white font-bold text-center mb-2">Modifier ta bio</p>
                                             <p className="text-[10px] text-gray-400 text-center mb-3">Visible par les autres joueurs</p>
-                                            <input
-                                                type="text"
+                                            <textarea
                                                 maxLength={TCG_BIO_MAX}
                                                 value={bioText}
                                                 onChange={e => setBioText(e.target.value)}
-                                                onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') handleSaveBio(); }}
+                                                onFocus={handleTextFocus}
+                                                onBlur={handleTextBlur}
+                                                onKeyDown={e => { e.stopPropagation(); if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') handleSaveBio(); }}
+                                                onKeyUp={e => e.stopPropagation()}
                                                 placeholder="Décris-toi, ce que tu recherches..."
+                                                rows={3}
                                                 autoFocus
-                                                className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-500 outline-none focus:border-cyan-500/50 text-center mb-1"
+                                                data-phone-input="true"
+                                                className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-500 outline-none focus:border-cyan-500/50 text-center mb-1 resize-none leading-relaxed"
                                             />
                                             <span className="block text-[9px] text-gray-500 text-center mb-3">{bioText.length}/{TCG_BIO_MAX}</span>
                                             {bioMessage && <span className="block text-[10px] text-red-400 text-center mb-2">{bioMessage}</span>}
                                             <div className="flex gap-2">
                                                 <button
                                                     className="flex-1 py-2.5 rounded-xl bg-white/5 border border-white/10 text-gray-400 text-sm font-semibold"
-                                                    onClick={() => { setEditingBio(false); setBioText(profilePage.bio ?? ''); setBioMessage(null); }}
+                                                    onClick={() => { void setKeyboardFocus(false); setEditingBio(false); setBioText(profilePage.bio ?? ''); setBioMessage(null); }}
                                                 >
                                                     Annuler
                                                 </button>
@@ -620,13 +640,7 @@ export const TcgProfile: React.FC = () => {
                                 <div className="grid grid-cols-3 gap-3" style={{ alignContent: 'start' }}>
                                     {highestEarned.map(badge => (
                                         <div key={badge.id} className="flex flex-col items-center">
-                                            {badge.image ? (
-                                                <img src={getBadgeImageUrl(badge.image)} alt={badge.label} className="w-full object-contain" style={{ maxHeight: 120 }} />
-                                            ) : (
-                                                <div className="w-full flex items-center justify-center" style={{ height: 120 }}>
-                                                    <span className="text-5xl">{badge.icon}</span>
-                                                </div>
-                                            )}
+                                            <BadgeImage badge={badge} className="w-full object-contain" style={{ maxHeight: 120 }} fallbackClassName="text-5xl" />
                                         </div>
                                     ))}
                                 </div>
@@ -647,7 +661,7 @@ export const TcgProfile: React.FC = () => {
                                         <div key={cat}>
                                             <span className="text-[9px] font-semibold uppercase tracking-wider" style={{ color: categoryColors[cat] }}>{categoryLabels[cat]}</span>
                                             <div className="flex flex-col gap-1.5 mt-1">
-                                                {catBadges.map(badge => <BadgeRow key={badge.id} badge={badge} getAssetUrl={getAssetUrl} />)}
+                                                {catBadges.map(badge => <BadgeRow key={badge.id} badge={badge} />)}
                                             </div>
                                         </div>
                                     );
@@ -684,17 +698,21 @@ export const TcgProfile: React.FC = () => {
                         {(contactStatus === 'none' || contactStatus === 'rejected') && showMessageInput && (
                             <div className="flex flex-col gap-2">
                                 <div className="relative">
-                                    <input type="text" maxLength={50} value={contactMessage} onChange={e => setContactMessage(e.target.value)}
-                                        onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') handleSendRequest(); }}
+                                    <textarea maxLength={50} value={contactMessage} onChange={e => setContactMessage(e.target.value)}
+                                        onFocus={handleTextFocus}
+                                        onBlur={handleTextBlur}
+                                        onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendRequest(); } }}
+                                        onKeyUp={e => e.stopPropagation()}
                                         placeholder="Ajouter un message..." autoFocus data-phone-input="true"
-                                        className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 pr-10 text-xs text-white placeholder-gray-500 outline-none focus:border-cyan-500/50"
+                                        rows={2}
+                                        className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 pr-10 text-xs text-white placeholder-gray-500 outline-none focus:border-cyan-500/50 resize-none leading-relaxed"
                                     />
-                                    <button className="absolute right-2 top-1/2 -translate-y-1/2 text-cyan-400 hover:text-cyan-300 disabled:text-gray-600" onClick={handleSendRequest} disabled={sendingRequest}>
+                                    <button className="absolute right-2 bottom-2 text-cyan-400 hover:text-cyan-300 disabled:text-gray-600" onClick={handleSendRequest} disabled={sendingRequest}>
                                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4"><path d="M3.478 2.405a.75.75 0 00-.926.94l2.432 7.905H13.5a.75.75 0 010 1.5H4.984l-2.432 7.905a.75.75 0 00.926.94 60.519 60.519 0 0018.445-8.986.75.75 0 000-1.218A60.517 60.517 0 003.478 2.405z" /></svg>
                                     </button>
                                 </div>
                                 <div className="flex justify-between">
-                                    <button className="text-[10px] text-gray-500" onClick={() => { setShowMessageInput(false); setContactMessage(''); }}>Annuler</button>
+                                    <button className="text-[10px] text-gray-500" onClick={() => { void setKeyboardFocus(false); setShowMessageInput(false); setContactMessage(''); }}>Annuler</button>
                                     <span className="text-[10px] text-gray-600">{contactMessage.length}/50</span>
                                 </div>
                             </div>
@@ -812,7 +830,8 @@ export const TcgProfile: React.FC = () => {
                                 {profilePage.availableBorders.map(border => {
                                     const isActive = profilePage.border?.id === border.id;
                                     const reward = profilePage.levelRewards?.find(r => r.type === 'border' && r.id === border.id);
-                                    const isLocked = reward ? !reward.unlocked : false;
+                                    const requiredLevel = border.requiredLevel ?? reward?.requiredLevel;
+                                    const isLocked = border.unlocked === false || (reward ? !reward.unlocked : false);
                                     return (
                                         <button key={border.id}
                                             className={`flex items-center gap-3 p-2.5 rounded-lg border text-left transition-colors ${isActive ? 'bg-purple-500/20 border-purple-500/40' : 'bg-white/5 border-white/10'}`}
@@ -821,8 +840,8 @@ export const TcgProfile: React.FC = () => {
                                         >
                                             <img src={getBorderImageUrl(border.image)} alt={border.name} className="w-8 h-8 object-contain" />
                                             <span className={`text-xs font-semibold ${isActive ? 'text-purple-300' : 'text-white'}`}>{border.name}</span>
-                                            {isLocked && reward && (
-                                                <span className="ml-auto text-[9px] text-gray-500">🔒 Niv. {reward.requiredLevel}</span>
+                                            {isLocked && requiredLevel && (
+                                                <span className="ml-auto text-[9px] text-gray-500">🔒 Niv. {requiredLevel}</span>
                                             )}
                                         </button>
                                     );
@@ -900,7 +919,8 @@ export const TcgProfile: React.FC = () => {
                             </button>
                             {profilePage.availableBgProfiles.map(bg => {
                                 const reward = profilePage.levelRewards?.find(r => r.type === 'bg_profile' && r.id === bg.id);
-                                const isLocked = reward ? !reward.unlocked : false;
+                                const requiredLevel = bg.requiredLevel ?? reward?.requiredLevel;
+                                const isLocked = bg.unlocked === false || (reward ? !reward.unlocked : false);
                                 const isActive = profilePage.bgProfile?.id === bg.id;
                                 return (
                                     <button key={bg.id}
@@ -914,9 +934,9 @@ export const TcgProfile: React.FC = () => {
                                         disabled={isLocked || bgProfileLoading}
                                     >
                                         <img src={getBgProfileImageUrl(bg.image)} alt={bg.name} className="w-full h-full object-cover" />
-                                        {isLocked && reward && (
+                                        {isLocked && requiredLevel && (
                                             <div className="absolute inset-0 flex items-center justify-center bg-black/50">
-                                                <span className="text-[9px] text-white font-bold">🔒 Niv. {reward.requiredLevel}</span>
+                                                <span className="text-[9px] text-white font-bold">🔒 Niv. {requiredLevel}</span>
                                             </div>
                                         )}
                                     </button>
@@ -932,7 +952,50 @@ export const TcgProfile: React.FC = () => {
 
 // ---- Badge Row ----
 
-const BadgeRow: React.FC<{ badge: TcgBadge; getAssetUrl: (p: string) => string }> = ({ badge, getAssetUrl }) => {
+const getBadgeCandidates = (badge: TcgBadge): string[] => {
+    const candidates = new Set<string>();
+    const image = badge.image || `badges/${badge.id}.webp`;
+    candidates.add(getBadgeImageUrl(image));
+
+    if (image.endsWith('.webp')) {
+        candidates.add(getBadgeImageUrl(image.replace(/\.webp$/, '.png')));
+    } else if (image.endsWith('.png')) {
+        candidates.add(getBadgeImageUrl(image.replace(/\.png$/, '.webp')));
+    } else {
+        candidates.add(getBadgeImageUrl(`badges/${badge.id}.webp`));
+        candidates.add(getBadgeImageUrl(`badges/${badge.id}.png`));
+    }
+
+    return [...candidates];
+};
+
+const BadgeImage: React.FC<{ badge: TcgBadge; className: string; style?: React.CSSProperties; fallbackClassName?: string }> = ({ badge, className, style, fallbackClassName }) => {
+    const candidates = React.useMemo(() => getBadgeCandidates(badge), [badge]);
+    const [index, setIndex] = React.useState(0);
+    const src = candidates[index];
+
+    React.useEffect(() => setIndex(0), [badge.id, badge.image]);
+
+    if (!src || index >= candidates.length) {
+        return (
+            <div className="w-full flex items-center justify-center" style={style}>
+                <span className={fallbackClassName ?? 'text-lg'}>{badge.icon}</span>
+            </div>
+        );
+    }
+
+    return (
+        <img
+            src={src}
+            alt={badge.label}
+            className={className}
+            style={style}
+            onError={() => setIndex(i => i + 1)}
+        />
+    );
+};
+
+const BadgeRow: React.FC<{ badge: TcgBadge }> = ({ badge }) => {
     const progress = badge.progress ?? 0;
     const target = badge.target ?? 1;
     const pct = Math.min(100, Math.round((progress / target) * 100));
@@ -943,7 +1006,7 @@ const BadgeRow: React.FC<{ badge: TcgBadge; getAssetUrl: (p: string) => string }
             style={{ opacity: badge.earned ? 1 : 0.4 }}
         >
             <div className="w-7 h-7 flex items-center justify-center flex-shrink-0">
-                {badge.image ? <img src={getBadgeImageUrl(badge.image)} alt={badge.label} className="w-6 h-6" /> : <span className="text-lg">{badge.icon}</span>}
+                <BadgeImage badge={badge} className="w-6 h-6 object-contain" fallbackClassName="text-lg" />
             </div>
             <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between mb-0.5">

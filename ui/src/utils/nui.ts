@@ -43,12 +43,17 @@ export async function nui<T = unknown>(event: string, data?: unknown): Promise<T
 }
 
 /**
- * Signal client script to enable/disable game control blocking.
- * This is now a no-op — lb-phone handles input focus via components.js
- * (MutationObserver on input/textarea + toggleInput). Kept for API compat.
+ * Signal LB Phone to enable/disable game control blocking while a text field is focused.
+ * Most inputs are handled by lb-phone's MutationObserver, but inline fields can miss it,
+ * so we call the injected helper explicitly when it exists.
  */
-export async function setKeyboardFocus(_focus: boolean): Promise<void> {
-    // No-op: lb-phone components.js handles this automatically
+export async function setKeyboardFocus(focus: boolean): Promise<void> {
+    const toggleInput = (window as any).toggleInput;
+    if (typeof toggleInput === 'function') {
+        toggleInput(focus);
+    }
+
+    await nui('tcg:keyboardFocus', { focus });
 }
 
 // ═══════════════════════════════════════════════════════════════════

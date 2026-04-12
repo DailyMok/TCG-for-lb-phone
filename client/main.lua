@@ -65,9 +65,32 @@ RegisterNUICallback('tcg:getConfig', function(data, cb)
 end)
 
 -- ═══ Keyboard focus ═══
--- lb-phone handles input focus automatically via components.js MutationObserver.
--- Keep callback registered as no-op so existing UI code doesn't error.
+-- lb-phone usually handles input focus automatically via components.js, but
+-- inline profile text fields can miss it, so the UI can explicitly block controls.
+local keyboardFocus = false
+local keyboardFocusThread = false
+
+local function SetTcgKeyboardFocus(focus)
+    keyboardFocus = focus == true
+
+    if not keyboardFocus or keyboardFocusThread then
+        return
+    end
+
+    keyboardFocusThread = true
+    CreateThread(function()
+        while keyboardFocus do
+            DisableAllControlActions(0)
+            DisableAllControlActions(1)
+            DisableAllControlActions(2)
+            Wait(0)
+        end
+        keyboardFocusThread = false
+    end)
+end
+
 RegisterNUICallback('tcg:keyboardFocus', function(data, cb)
+    SetTcgKeyboardFocus(data and data.focus == true)
     cb({ ok = true })
 end)
 
@@ -146,7 +169,7 @@ end)
 RegisterNUICallback('tcg:toggleProtected', function(data, cb)
     QBCore.Functions.TriggerCallback('lb-tcg:server:toggleProtected', function(result)
         cb(result)
-    end, data.cardId)
+    end, data.userCardId, data.cardId)
 end)
 
 -- ═══ Sell Set ═══

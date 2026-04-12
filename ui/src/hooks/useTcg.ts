@@ -344,10 +344,10 @@ export function useTcgSetBorder() {
 export function useTcgToggleProtected() {
     const [loading, setLoading] = useState(false);
 
-    const toggle = useCallback(async (cardId: number): Promise<{ success: boolean; isProtected: boolean; message?: string } | null> => {
+    const toggle = useCallback(async (cardId: number, userCardId?: number): Promise<{ success: boolean; isProtected: boolean; message?: string } | null> => {
         setLoading(true);
         try {
-            return await nui<{ success: boolean; isProtected: boolean; message?: string }>('tcg:toggleProtected', { cardId });
+            return await nui<{ success: boolean; isProtected: boolean; message?: string }>('tcg:toggleProtected', { cardId, userCardId });
         } catch (e) { console.error('[TCG] toggleProtected error', e); return null; }
         finally { setLoading(false); }
     }, []);

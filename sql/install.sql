@@ -72,6 +72,7 @@ CREATE TABLE IF NOT EXISTS `tcg_profile` (
     `hunt_total_captures` INT NOT NULL DEFAULT 0,
     `hunt_total_crafts` INT NOT NULL DEFAULT 0,
     `hunt_total_event_captures` INT NOT NULL DEFAULT 0,
+    `hunt_total_duel_wins` INT NOT NULL DEFAULT 0,
     -- XP system
     `xp` INT NOT NULL DEFAULT 0,
     `bg_profile_id` INT DEFAULT NULL,
@@ -180,9 +181,11 @@ CREATE TABLE IF NOT EXISTS `tcg_hunt_fragment_spawn` (
     `spawned_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `expires_at` DATETIME NOT NULL,
     `is_event` BOOLEAN NOT NULL DEFAULT FALSE,
+    `is_hot_zone` BOOLEAN NOT NULL DEFAULT FALSE,
     PRIMARY KEY (`id`),
     INDEX `idx_expires_at` (`expires_at`),
-    INDEX `idx_position` (`pos_x`, `pos_y`)
+    INDEX `idx_position` (`pos_x`, `pos_y`),
+    INDEX `idx_hot_zone` (`is_hot_zone`, `expires_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `tcg_hunt_inventory` (
@@ -271,6 +274,47 @@ CREATE TABLE IF NOT EXISTS `tcg_hunt_activity_log` (
     `captured_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
     INDEX `idx_captured_at` (`captured_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `tcg_hunt_hot_zone` (
+    `id` INT NOT NULL AUTO_INCREMENT,
+    `zone_name` VARCHAR(50) NOT NULL,
+    `hour_key` VARCHAR(13) NOT NULL,
+    `selected_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `expires_at` DATETIME NOT NULL,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_hour_key` (`hour_key`),
+    INDEX `idx_expires_at` (`expires_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `tcg_hunt_duel` (
+    `id` VARCHAR(36) NOT NULL,
+    `challenger_id` VARCHAR(50) NOT NULL,
+    `target_id` VARCHAR(50) NOT NULL,
+    `challenger_score` INT NOT NULL DEFAULT 0,
+    `target_score` INT DEFAULT NULL,
+    `challenger_started_at` DATETIME DEFAULT NULL,
+    `target_started_at` DATETIME DEFAULT NULL,
+    `challenger_completed_at` DATETIME DEFAULT NULL,
+    `target_completed_at` DATETIME DEFAULT NULL,
+    `status` VARCHAR(20) NOT NULL DEFAULT 'pending',
+    `winner_id` VARCHAR(50) DEFAULT NULL,
+    `stolen_archetype` VARCHAR(50) DEFAULT NULL,
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `expires_at` DATETIME NOT NULL,
+    `resolved_at` DATETIME DEFAULT NULL,
+    PRIMARY KEY (`id`),
+    INDEX `idx_target_pending` (`target_id`, `status`, `expires_at`),
+    INDEX `idx_challenger` (`challenger_id`, `created_at`),
+    INDEX `idx_pair_created` (`challenger_id`, `target_id`, `created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `tcg_hunt_player_shield` (
+    `citizenid` VARCHAR(50) NOT NULL,
+    `expires_at` DATETIME NOT NULL,
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`citizenid`),
+    INDEX `idx_expires_at` (`expires_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ═══ XP SYSTEM — BG PROFILE ═══

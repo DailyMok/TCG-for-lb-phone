@@ -11,21 +11,23 @@ local function dist2D(x1, y1, x2, y2) return math.sqrt((x2-x1)^2 + (y2-y1)^2) en
 local function getItemDisplayName(t)
     if t == C.ItemDetector then return 'Détecteur'
     elseif t == C.ItemRetry then return 'Seconde Chance'
+    elseif t == C.ItemShield then return C.ItemShieldLabel or 'Bouclier UwU'
     else return t end
 end
 
 local function rollStopItems()
     local roll = math.random()
-    if roll < 0.33 then return {{ type = C.ItemDetector, quantity = 1 }}
-    elseif roll < 0.66 then return {{ type = C.ItemRetry, quantity = 2 }}
-    else return {{ type = C.ItemDetector, quantity = 1 }, { type = C.ItemRetry, quantity = 2 }} end
+    if roll < 0.30 then return {{ type = C.ItemDetector, quantity = 1 }}
+    elseif roll < 0.60 then return {{ type = C.ItemRetry, quantity = 2 }}
+    elseif roll < 0.90 then return {{ type = C.ItemShield, quantity = 1 }}
+    else return {{ type = C.ItemDetector, quantity = 1 }, { type = C.ItemRetry, quantity = 2 }, { type = C.ItemShield, quantity = 1 }} end
 end
 
 -- ═══ Nearby Fragments ═══
 QBCore.Functions.CreateCallback('lb-tcg:server:huntGetNearby', function(source, cb, px, py, pz)
     local rows = MySQL.query.await([[
         SELECT id, archetype, tier, pos_x, pos_y, pos_z,
-               UNIX_TIMESTAMP(expires_at)*1000 as expiresAt, is_event, zone_name,
+               UNIX_TIMESTAMP(expires_at)*1000 as expiresAt, is_event, is_hot_zone, zone_name,
                SQRT(POW(pos_x-?,2)+POW(pos_y-?,2)) as distance
         FROM tcg_hunt_fragment_spawn WHERE expires_at > NOW()
         HAVING distance <= ?
@@ -33,9 +35,39 @@ QBCore.Functions.CreateCallback('lb-tcg:server:huntGetNearby', function(source, 
     ]], { px, py, C.NotificationRadius })
     local fragments = {}
     for _, r in ipairs(rows or {}) do
-        fragments[#fragments+1] = { id=r.id, archetype=r.archetype, tier=r.tier, x=r.pos_x, y=r.pos_y, z=r.pos_z, expiresAt=tonumber(r.expiresAt), isEvent=r.is_event==1, distance=tonumber(r.distance), zoneName=r.zone_name }
+        fragments[#fragments+1] = { id=r.id, archetype=r.archetype, tier=r.tier, x=r.pos_x, y=r.pos_y, z=r.pos_z, expiresAt=tonumber(r.expiresAt), isEvent=r.is_event==1, isHotZone=r.is_hot_zone==1, distance=tonumber(r.distance), zoneName=r.zone_name }
     end
     cb(fragments)
+end)
+
+-- ═══ Hot Zone ═══
+QBCore.Functions.CreateCallback('lb-tcg:server:huntGetHotZone', function(source, cb)
+    local rows = MySQL.query.await([[
+        SELECT zone_name, UNIX_TIMESTAMP(selected_at)*1000 as selectedAt, UNIX_TIMESTAMP(expires_at)*1000 as expiresAt
+        FROM tcg_hunt_hot_zone
+        WHERE expires_at > NOW()
+        ORDER BY selected_at DESC
+        LIMIT 1
+    ]]) or {}
+    if #rows == 0 then return cb(nil) end
+
+    local row = rows[1]
+    local polygon = {}
+    for _, zone in ipairs(TCGZones.Polygons or {}) do
+        if zone.name == row.zone_name then
+            for _, p in ipairs(zone.points or {}) do
+                polygon[#polygon + 1] = { x = p.x, y = p.y }
+            end
+            break
+        end
+    end
+
+    cb({
+        zoneName = row.zone_name,
+        selectedAt = tonumber(row.selectedAt),
+        expiresAt = tonumber(row.expiresAt),
+        polygon = polygon,
+    })
 end)
 
 -- ═══ Start Capture ═══
@@ -246,7 +278,7 @@ QBCore.Functions.CreateCallback('lb-tcg:server:huntUseDetector', function(source
     if consumed == 0 then return cb({ success=false, fragments={}, expiresAt=0, message='Pas de détecteur.' }) end
 
     local rows = MySQL.query.await([[
-        SELECT id, archetype, tier, pos_x, pos_y, pos_z, UNIX_TIMESTAMP(expires_at)*1000 as expiresAt, is_event, zone_name,
+        SELECT id, archetype, tier, pos_x, pos_y, pos_z, UNIX_TIMESTAMP(expires_at)*1000 as expiresAt, is_event, is_hot_zone, zone_name,
                SQRT(POW(pos_x-?,2)+POW(pos_y-?,2)) as distance
         FROM tcg_hunt_fragment_spawn WHERE expires_at > NOW()
         ORDER BY distance ASC LIMIT ?
@@ -254,7 +286,7 @@ QBCore.Functions.CreateCallback('lb-tcg:server:huntUseDetector', function(source
 
     local frags = {}
     for _, r in ipairs(rows) do
-        frags[#frags+1] = { id=r.id, archetype=r.archetype, tier=r.tier, x=r.pos_x, y=r.pos_y, z=r.pos_z, expiresAt=tonumber(r.expiresAt), isEvent=r.is_event==1, distance=tonumber(r.distance), zoneName=r.zone_name }
+        frags[#frags+1] = { id=r.id, archetype=r.archetype, tier=r.tier, x=r.pos_x, y=r.pos_y, z=r.pos_z, expiresAt=tonumber(r.expiresAt), isEvent=r.is_event==1, isHotZone=r.is_hot_zone==1, distance=tonumber(r.distance), zoneName=r.zone_name }
     end
 
     local expiresAt = os.time() * 1000 + C.DetectorDurationMs

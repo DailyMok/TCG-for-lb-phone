@@ -1,5 +1,5 @@
 import { atom } from 'jotai';
-import type { HuntFragmentSpawn, HuntFragmentProgress, HuntItem, HuntActiveStop, HuntNearestFragment, HuntRecentActivity } from '../types/tcg-hunt.types';
+import type { HuntFragmentSpawn, HuntFragmentProgress, HuntItem, HuntActiveStop, HuntNearestFragment, HuntRecentActivity, HuntHotZone, HuntDuelState } from '../types/tcg-hunt.types';
 import { HUNT_FRAGMENT_MAP_VISIBLE_RADIUS } from '../types/tcg-hunt.types';
 
 // ═══ Nearby fragments (from server, within 1km) ═══
@@ -52,6 +52,13 @@ export const huntPokestopsAtom = atom<HuntActiveStop[]>([]);
 
 // ═══ Event notification ═══
 export const huntEventNotificationAtom = atom<{ archetype: string; message: string; expiresAt: number } | null>(null);
+
+// ═══ Hot zone ═══
+export const huntHotZoneAtom = atom<HuntHotZone | null>(null);
+
+// ═══ Duel state / notification ═══
+export const huntDuelStateAtom = atom<HuntDuelState>({ incoming: [], activeShieldExpiresAt: null, duelWins: 0 });
+export const huntDuelNotificationAtom = atom<{ duelId?: string; challengerName?: string; message: string; expiresAt: number } | null>(null);
 
 // ═══ Captured fragment IDs (for this session, grayed out in list) ═══
 export const huntCapturedIdsAtom = atom<Set<string>>(new Set<string>());

@@ -57,10 +57,120 @@ end
 
 local function dtInMin(min) return os.date('%Y-%m-%d %H:%M:%S', os.time() + min * 60) end
 local function dtInMs(ms) return os.date('%Y-%m-%d %H:%M:%S', os.time() + math.floor(ms / 1000)) end
+local function dtFromTs(ts) return os.date('%Y-%m-%d %H:%M:%S', ts) end
+
+local function currentHourWindow()
+    local t = os.date('*t')
+    t.min = 0
+    t.sec = 0
+    local startTs = os.time(t)
+    return os.date('%Y-%m-%d %H', startTs), startTs, startTs + 3600
+end
+
+local function findZoneByName(zoneName)
+    if not zoneName or not TCGZones or not TCGZones.Polygons then return nil end
+    for _, zone in ipairs(TCGZones.Polygons) do
+        if zone.name == zoneName then return zone end
+    end
+    return nil
+end
+
+local function getPolygonBounds(points)
+    local minX, maxX, minY, maxY = math.huge, -math.huge, math.huge, -math.huge
+    for _, p in ipairs(points or {}) do
+        minX = math.min(minX, p.x); maxX = math.max(maxX, p.x)
+        minY = math.min(minY, p.y); maxY = math.max(maxY, p.y)
+    end
+    return minX, maxX, minY, maxY
+end
+
+local function findPositionInZone(zoneName, existingPositions, maxRetries)
+    local zone = findZoneByName(zoneName)
+    if not zone then return nil end
+    local minX, maxX, minY, maxY = getPolygonBounds(zone.points)
+    local minDistance = C.HotZoneMinDistance or C.FragmentMinDistance
+    maxRetries = maxRetries or 120
+    for _ = 1, maxRetries do
+        local x = minX + math.random() * (maxX - minX)
+        local y = minY + math.random() * (maxY - minY)
+        if TCGZones.PointInPolygon(x, y, zone.points) and not isInExcludedZone(x, y) then
+            local tooClose = false
+            for _, p in ipairs(existingPositions) do
+                if math.sqrt((p.x - x)^2 + (p.y - y)^2) < minDistance then tooClose = true; break end
+            end
+            if not tooClose then return { x = x, y = y, z = 30.0 } end
+        end
+    end
+    return nil
+end
 
 -- ═══ Helper: shuffle table in-place ═══
 local function shuffleTable(t)
     for i = #t, 2, -1 do local j = math.random(i); t[i], t[j] = t[j], t[i] end
+end
+
+-- ═══ Hot zone (one real-hour zone, one 5-minute fragment inside it) ═══
+
+local function ensureHotZone()
+    local active = MySQL.query.await([[
+        SELECT zone_name, hour_key, UNIX_TIMESTAMP(selected_at)*1000 as selectedAt, UNIX_TIMESTAMP(expires_at)*1000 as expiresAt
+        FROM tcg_hunt_hot_zone
+        WHERE expires_at > NOW()
+        ORDER BY selected_at DESC
+        LIMIT 1
+    ]]) or {}
+    if #active > 0 then return active[1] end
+
+    local hourKey, startTs, endTs = currentHourWindow()
+    local zones = TCGZones and TCGZones.Polygons or {}
+    if #zones == 0 then return nil end
+    local zone = zones[math.random(#zones)]
+
+    MySQL.insert.await([[
+        INSERT INTO tcg_hunt_hot_zone (zone_name, hour_key, selected_at, expires_at)
+        VALUES (?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE zone_name = VALUES(zone_name), selected_at = VALUES(selected_at), expires_at = VALUES(expires_at)
+    ]], { zone.name, hourKey, dtFromTs(startTs), dtFromTs(endTs) })
+
+    local polygon = {}
+    for _, p in ipairs(zone.points or {}) do polygon[#polygon + 1] = { x = p.x, y = p.y } end
+    TriggerClientEvent('lb-tcg:client:huntHotZoneUpdated', -1, {
+        zoneName = zone.name,
+        selectedAt = startTs * 1000,
+        expiresAt = endTs * 1000,
+        polygon = polygon,
+    })
+    print(('[LB-TCG HotZone] New hot zone: %s (%s)'):format(zone.name, hourKey))
+    return { zone_name = zone.name, hour_key = hourKey, selectedAt = startTs * 1000, expiresAt = endTs * 1000 }
+end
+
+local function ensureHotZoneFragment()
+    local hotZone = ensureHotZone()
+    if not hotZone or not hotZone.zone_name then return end
+
+    MySQL.update.await('DELETE FROM tcg_hunt_fragment_spawn WHERE is_hot_zone = 1 AND (expires_at < NOW() OR zone_name != ?)', { hotZone.zone_name })
+
+    local activeHot = MySQL.scalar.await('SELECT COUNT(*) FROM tcg_hunt_fragment_spawn WHERE is_hot_zone = 1 AND expires_at > NOW() AND zone_name = ?', { hotZone.zone_name }) or 0
+    if activeHot > 0 then return end
+
+    local tier = pickWeightedTier()
+    local arch = pickArchetypeForTier(tier)
+    if not arch then return end
+
+    local posRows = MySQL.query.await('SELECT pos_x, pos_y FROM tcg_hunt_fragment_spawn WHERE expires_at > NOW()') or {}
+    local existing = {}; for _, r in ipairs(posRows) do existing[#existing + 1] = { x = r.pos_x, y = r.pos_y } end
+    local pos = findPositionInZone(hotZone.zone_name, existing)
+    if not pos then
+        print(('[LB-TCG HotZone] No valid position found for %s'):format(hotZone.zone_name))
+        return
+    end
+
+    MySQL.insert.await([[
+        INSERT INTO tcg_hunt_fragment_spawn (id,archetype,tier,pos_x,pos_y,pos_z,expires_at,is_event,zone_name,is_hot_zone)
+        VALUES (?,?,?,?,?,?,?,0,?,1)
+    ]], { TCG_UUID(), arch, tier, pos.x, pos.y, pos.z, dtInMs(C.HotZoneFragmentLifetimeMs), hotZone.zone_name })
+
+    print(('[LB-TCG HotZone] Fragment spawned in %s: %s (%s)'):format(hotZone.zone_name, arch, tier))
 end
 
 -- ═══ Init Stops (balanced: 5 south + 5 north, deterministic lifetimes) ═══
@@ -161,7 +271,7 @@ end
 
 -- ═══ Init Fragments (déterministe : 5, 10, 15, ..., 150 min → 1 expire toutes les 5 min) ═══
 local function initFragments()
-    local cnt = MySQL.scalar.await('SELECT COUNT(*) FROM tcg_hunt_fragment_spawn WHERE expires_at > NOW()') or 0
+    local cnt = MySQL.scalar.await('SELECT COUNT(*) FROM tcg_hunt_fragment_spawn WHERE expires_at > NOW() AND (is_hot_zone = 0 OR is_hot_zone IS NULL)') or 0
     local needed = math.max(0, C.MaxActiveFragments - cnt)
     if needed == 0 then print(('[LB-TCG Spawn] Already %d fragments'):format(cnt)); return end
     local posRows = MySQL.query.await('SELECT pos_x, pos_y FROM tcg_hunt_fragment_spawn WHERE expires_at > NOW()') or {}
@@ -186,7 +296,7 @@ end
 -- ═══ Rotate Fragments ═══
 local function rotateFragments()
     MySQL.update.await('DELETE FROM tcg_hunt_fragment_spawn WHERE expires_at < NOW()')
-    local cnt = MySQL.scalar.await('SELECT COUNT(*) FROM tcg_hunt_fragment_spawn WHERE expires_at > NOW()') or 0
+    local cnt = MySQL.scalar.await('SELECT COUNT(*) FROM tcg_hunt_fragment_spawn WHERE expires_at > NOW() AND (is_hot_zone = 0 OR is_hot_zone IS NULL)') or 0
     local needed = C.MaxActiveFragments - cnt; if needed <= 0 then return end
     local posRows = MySQL.query.await('SELECT pos_x, pos_y FROM tcg_hunt_fragment_spawn WHERE expires_at > NOW()') or {}
     local existing = {}; for _, r in ipairs(posRows) do existing[#existing + 1] = { x = r.pos_x, y = r.pos_y } end
@@ -326,8 +436,10 @@ CreateThread(function()
     initStops(); initFragments()
     -- Cayo Perico
     initCayoStop(); initCayoFragments()
+    ensureHotZoneFragment()
     -- Timers
     CreateThread(function() while true do Wait(C.FragmentRotationIntervalMs); rotateFragments() end end)
+    CreateThread(function() while true do Wait(30000); ensureHotZoneFragment() end end)
     CreateThread(function() while true do Wait(C.StopRotationIntervalMs); rotateStops() end end)
     CreateThread(function() while true do Wait(60000); MySQL.update('DELETE FROM tcg_hunt_fragment_spawn WHERE expires_at < NOW()') end end)
     -- Cayo timers

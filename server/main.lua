@@ -4,6 +4,34 @@
 
 local QBCore = exports['qb-core']:GetCoreObject()
 
+local function TCG_IsTruthy(value)
+    if value == true or value == 1 then return true end
+    if type(value) == 'string' then
+        local normalized = value:lower()
+        return normalized == '1' or normalized == 'true'
+    end
+    return false
+end
+
+local function TCG_NormalizeRewardRef(value)
+    if not value then return nil end
+
+    local normalized = tostring(value):lower():gsub('\\', '/')
+    normalized = normalized:match('^%s*(.-)%s*$')
+    normalized = normalized:match('[^/]+$') or normalized
+    normalized = normalized:gsub('%.webp$', ''):gsub('%.png$', ''):gsub('%.jpg$', ''):gsub('%.jpeg$', '')
+    normalized = normalized:gsub('[%s_%-]+', '_')
+
+    return normalized
+end
+
+local function TCG_RewardMatches(assetPath, rewardRef)
+    local asset = TCG_NormalizeRewardRef(assetPath)
+    local reward = TCG_NormalizeRewardRef(rewardRef)
+
+    return asset ~= nil and reward ~= nil and asset == reward
+end
+
 -- ═══ XP Helper ═══
 
 function TCG_AddXp(citizenid, amount, reason)
@@ -31,7 +59,7 @@ function TCG_GetBadgeImagePath(badgeId)
     if f then f:close(); return 'badges/' .. badgeId .. '.webp' end
     f = io.open(png, 'r')
     if f then f:close(); return 'badges/' .. badgeId .. '.png' end
-    return nil
+    return 'badges/' .. badgeId .. '.webp'
 end
 
 -- ═══════════════════════════════════════════════════════════════════
@@ -150,7 +178,7 @@ QBCore.Functions.CreateCallback('lb-tcg:server:setBorder', function(source, cb, 
     if border and #border > 0 then
         local rewards = MySQL.query.await('SELECT level, reward_ref FROM tcg_level_reward WHERE reward_type = ?', { 'border' }) or {}
         for _, r in ipairs(rewards) do
-            if border[1].image and border[1].image:match(r.reward_ref .. '$') then
+            if TCG_RewardMatches(border[1].image, r.reward_ref) then
                 if r.level > levelInfo.level then
                     return cb({ success = false, message = 'Bordure non débloquée (niveau ' .. r.level .. ' requis).' })
                 end
@@ -344,25 +372,31 @@ QBCore.Functions.CreateCallback('lb-tcg:server:getCollection', function(source, 
             image = r.image,
             archetype = r.archetype,
             obtainedAt = tostring(r.obtainedAt),
-            isShowcase = r.isShowcase == 1,
-            isProtected = r.isProtected == 1,
+            isShowcase = TCG_IsTruthy(r.isShowcase),
+            isProtected = TCG_IsTruthy(r.isProtected),
         }
     end
 
     cb(collection)
 end)
 
-QBCore.Functions.CreateCallback('lb-tcg:server:toggleProtected', function(source, cb, cardId)
+QBCore.Functions.CreateCallback('lb-tcg:server:toggleProtected', function(source, cb, userCardId, cardId)
     local citizenid = TCG_GetCitizenId(source)
     if not citizenid then return cb({ success = false }) end
 
-    local card = MySQL.query.await('SELECT id, protected FROM tcg_user_card WHERE citizenid = ? AND card_id = ?', { citizenid, cardId })
+    local card = nil
+    if userCardId and tonumber(userCardId) then
+        card = MySQL.query.await('SELECT id, protected FROM tcg_user_card WHERE citizenid = ? AND id = ?', { citizenid, tonumber(userCardId) })
+    else
+        card = MySQL.query.await('SELECT id, protected FROM tcg_user_card WHERE citizenid = ? AND card_id = ?', { citizenid, cardId })
+    end
+
     if not card or #card == 0 then
         return cb({ success = false, message = 'Carte introuvable.' })
     end
 
-    local newProtected = card[1].protected == 0
-    MySQL.update.await('UPDATE tcg_user_card SET protected = ? WHERE id = ?', { newProtected, card[1].id })
+    local newProtected = not TCG_IsTruthy(card[1].protected)
+    MySQL.update.await('UPDATE tcg_user_card SET protected = ? WHERE id = ?', { newProtected and 1 or 0, card[1].id })
 
     cb({ success = true, isProtected = newProtected })
 end)
@@ -501,20 +535,26 @@ QBCore.Functions.CreateCallback('lb-tcg:server:getProfilePage', function(source,
         for _, reward in ipairs(rewards) do
             if reward.reward_type == 'border' then
                 for _, bd in ipairs(borders or {}) do
-                    if bd.image and bd.image:match(reward.reward_ref .. '$') then
-                        levelRewards[#levelRewards + 1] = {
+                    if TCG_RewardMatches(bd.image, reward.reward_ref) then
+                        local rewardInfo = {
                             type = 'border', id = bd.id, name = bd.name, image = bd.image,
                             requiredLevel = reward.level, unlocked = reward.level <= levelInfo.level,
                         }
+                        levelRewards[#levelRewards + 1] = rewardInfo
+                        bd.requiredLevel = rewardInfo.requiredLevel
+                        bd.unlocked = rewardInfo.unlocked
                     end
                 end
             elseif reward.reward_type == 'bg_profile' then
                 for _, bg in ipairs(availableBgProfiles) do
-                    if bg.image and bg.image:match(reward.reward_ref .. '$') then
-                        levelRewards[#levelRewards + 1] = {
+                    if TCG_RewardMatches(bg.image, reward.reward_ref) then
+                        local rewardInfo = {
                             type = 'bg_profile', id = bg.id, name = bg.name, image = bg.image,
                             requiredLevel = reward.level, unlocked = reward.level <= levelInfo.level,
                         }
+                        levelRewards[#levelRewards + 1] = rewardInfo
+                        bg.requiredLevel = rewardInfo.requiredLevel
+                        bg.unlocked = rewardInfo.unlocked
                     end
                 end
             end
@@ -1200,7 +1240,7 @@ QBCore.Functions.CreateCallback('lb-tcg:server:setBgProfile', function(source, c
         local bg = MySQL.query.await('SELECT image FROM tcg_bg_profile WHERE id = ?', { bgProfileId })
         if bg and #bg > 0 then
             for _, r in ipairs(rewards) do
-                if bg[1].image:match(r.reward_ref .. '$') then
+                if TCG_RewardMatches(bg[1].image, r.reward_ref) then
                     if r.level > levelInfo.level then
                         return cb({ success = false, message = 'Fond de profil non débloqué.' })
                     end

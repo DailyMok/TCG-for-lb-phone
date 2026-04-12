@@ -99,7 +99,7 @@ export const TcgViewer: React.FC = () => {
     };
 
     const handleToggleProtect = async () => {
-        const res = await toggle(card.cardId);
+        const res = await toggle(card.cardId, card.userCardId);
         if (res?.success) {
             setIsProtected(res.isProtected);
             setMessage(res.isProtected ? 'Carte protégée' : 'Protection retirée');

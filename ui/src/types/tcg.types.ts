@@ -137,6 +137,8 @@ export interface TcgBorderData {
     id: number;
     name: string;
     image: string;
+    requiredLevel?: number;
+    unlocked?: boolean;
 }
 
 // ═══ Contacts ═══
@@ -274,6 +276,7 @@ export const TCG_XP_SOURCES = {
     HUNT_CAPTURE: 15,
     HUNT_CRAFT: 100,
     HUNT_EVENT_CAPTURE: 40,
+    HUNT_DUEL_WIN: 5,
 } as const;
 
 export interface TcgLevelInfo {
@@ -290,6 +293,8 @@ export interface TcgBgProfileData {
     id: number;
     name: string;
     image: string;
+    requiredLevel?: number;
+    unlocked?: boolean;
 }
 
 export interface TcgLevelRewardItem {

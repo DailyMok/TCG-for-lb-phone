@@ -4,13 +4,14 @@ import React, { useCallback, useEffect, useState } from 'react';
 
 import { TcgScrollContainer } from '../components/TcgScrollContainer';
 import { getAssetUrl } from '../utils/nui';
-import { huntInventoryAtom, huntItemsAtom } from '../atoms/tcg-hunt.atom';
-import { useTcgHuntInventory } from '../hooks/useTcgHunt';
+import { huntDuelStateAtom, huntInventoryAtom, huntItemsAtom } from '../atoms/tcg-hunt.atom';
+import { useTcgHuntDuels, useTcgHuntInventory } from '../hooks/useTcgHunt';
 import {
     HuntFragmentProgress,
     HUNT_FRAGMENTS_PER_CARD,
     HUNT_ITEM_DETECTOR,
     HUNT_ITEM_RETRY,
+    HUNT_ITEM_SHIELD,
 } from '../types/tcg-hunt.types';
 
 // ═══ Couleurs par catégorie ═══
@@ -37,19 +38,33 @@ const ITEM_DISPLAY: Record<string, { name: string; icon: string; desc: string }>
         icon: '🎯',
         desc: 'Réduit le quota de cibles lors d\'une capture (-5)',
     },
+    [HUNT_ITEM_SHIELD]: {
+        name: 'Bouclier UwU',
+        icon: '🛡️',
+        desc: 'Protège des nouveaux duels pendant 15 min',
+    },
 };
 
 export const TcgHuntInventory: React.FC = () => {
     const inventory = useAtomValue(huntInventoryAtom);
     const items = useAtomValue(huntItemsAtom);
+    const duelState = useAtomValue(huntDuelStateAtom);
     const { refreshInventory, refreshItems, craft } = useTcgHuntInventory();
+    const { refreshDuelState, useShield } = useTcgHuntDuels();
 
     const [craftMessage, setCraftMessage] = useState<string | null>(null);
     const [tab, setTab] = useState<'fragments' | 'items'>('fragments');
+    const [now, setNow] = useState(Date.now());
 
     useEffect(() => {
         refreshInventory();
         refreshItems();
+        refreshDuelState();
+    }, []);
+
+    useEffect(() => {
+        const interval = setInterval(() => setNow(Date.now()), 1000);
+        return () => clearInterval(interval);
     }, []);
 
     // Regrouper les fragments par catégorie
@@ -77,6 +92,21 @@ export const TcgHuntInventory: React.FC = () => {
         },
         [craft, refreshInventory]
     );
+
+    const handleUseShield = useCallback(async () => {
+        const result = await useShield();
+        if (result) {
+            setCraftMessage(result.message);
+            setTimeout(() => setCraftMessage(null), 4000);
+            refreshItems();
+            refreshDuelState();
+        }
+    }, [useShield, refreshItems, refreshDuelState]);
+
+    const shieldRemainingMs = Math.max(0, (duelState.activeShieldExpiresAt ?? 0) - now);
+    const shieldLabel = shieldRemainingMs > 0
+        ? `${Math.floor(shieldRemainingMs / 60_000)}:${Math.floor((shieldRemainingMs % 60_000) / 1000).toString().padStart(2, '0')}`
+        : null;
 
     return (
         <div className="flex-1 flex flex-col overflow-hidden">
@@ -167,8 +197,21 @@ export const TcgHuntInventory: React.FC = () => {
                                             <div className="flex-1">
                                                 <div className="text-white text-sm font-medium">{display.name}</div>
                                                 <div className="text-white/40 text-xs">{display.desc}</div>
+                                                {item.type === HUNT_ITEM_SHIELD && shieldLabel && (
+                                                    <div className="text-cyan-300 text-[10px] font-semibold mt-1">Actif : {shieldLabel}</div>
+                                                )}
                                             </div>
-                                            <div className="text-white font-bold text-lg">x{item.quantity}</div>
+                                            <div className="flex flex-col items-end gap-1">
+                                                <div className="text-white font-bold text-lg">x{item.quantity}</div>
+                                                {item.type === HUNT_ITEM_SHIELD && (
+                                                    <button
+                                                        className="px-2.5 py-1 rounded-md bg-cyan-600 active:bg-cyan-700 text-white text-[10px] font-bold"
+                                                        onClick={handleUseShield}
+                                                    >
+                                                        Activer
+                                                    </button>
+                                                )}
+                                            </div>
                                         </div>
                                     );
                                 })}
