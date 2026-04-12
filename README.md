@@ -14,7 +14,7 @@ Application téléphone complète permettant aux joueurs de collectionner, écha
 
 **Nouveau en v3.7 : Cayo Perico, XP & Fonds de profil** — La carte Hunt s'étend à Cayo Perico avec stops et fragments dédiés. Système de progression XP avec 20 niveaux, récompenses débloquables (bordures, fonds de profil) et titres. Fonds de profil personnalisables avec opacité ajustable.
 
-**Nouveau en v4 : Ajout de la fonctionnalité de duel, de l'item bouclier UwU et la mise en place d'une zone chaude : un fragment spawn/despawn toutes les 5 mins.
+**Nouveau en v4 : Ajout de la fonctionnalité de duel, de l'item bouclier UwU et la mise en place d'une zone chaude : un fragment spawn/despawn toutes les 5 mins.**
 
 ⚠️ Assets sur mon Fork :
 - Logo Application
